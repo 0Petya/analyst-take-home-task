@@ -1,0 +1,93 @@
+---
+title: "CHQA Analyst take-home task"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+Here is our first task:
+
+---
+
+## Part 1: Assemble the project cohort
+The project goal is to identify patients seen for drug overdose, determine if they had an active opioid at the start of the encounter, and if they had any readmissions for drug overdose.
+
+Your task is to assemble the study cohort by identifying encounters that meet the following criteria:
+
+1. The patient’s visit is an encounter for drug overdose
+2. The hospital encounter occurs after July 15, 1999
+3. The patient’s age at time of encounter is between 18 and 35 (Patient is considered to be 35 until turning 36)
+
+---
+
+Sounds great. Let's start by taking a look at the data.
+
+```{r}
+allergies <- read_csv("datasets/allergies.csv")
+allergies
+
+encounters <- read_csv("datasets/encounters.csv")
+encounters
+
+medications <- read_csv("datasets/medications.csv")
+medications
+
+patients <- read_csv("datasets/patients.csv")
+patients
+
+procedures <- read_csv("datasets/procedures.csv")
+procedures
+```
+
+Ok, we are chiefly interested in the `encounters` table, and basically want to filter it based on the specifications given in the task. Let's start by filtering the encounters by drug overdose. Looking at the data dictionary sheet for the `encounters` table, we can see that the `REASONCODE` column are SNOMED-CT codes.
+
+We can lookup the code for a drug overdose here: https://browser.ihtsdotools.org/, which has the code as `55680006`.
+
+```{r}
+drug_overdoses <- filter(encounters, REASONCODE == 55680006)
+drug_overdoses
+```
+
+Great, now we just need to filter for encounters that occur after July 15, 1999.
+
+The `encounters` table has two column that represent the date of the encounter. `START` and `STOP`, further clarification would be neccessary to determine if the task is to find encounters that _begin_ after 07/15/1999 or _end_ at that date. For the purposes of this exercise, we'll go with encounters that _begin_ after that date due to the term _occur_ in the specification.
+
+```{r}
+after_date <- filter(drug_overdoses, START > "1999-07-15")
+arrange(after_date, START)
+```
+
+Now we're concerned with encounters with patients between the ages of 18 and 35; we'll need to join the `patients` table to handle that.
+
+```{r}
+with_patients <- inner_join(after_date, patients, c("PATIENT" = "Id"))
+with_patients
+```
+
+Based upon the wording in the specifications, the patient's age must be greater than or equal to 18 at the start of an encounter and less than or equal to 35 at the end of the encounter.
+
+Let's make sure that there are no encounters in our table that has not ended, because a patient could age to 36 by the time the encounter is over.
+
+```{r}
+not_ended <- drop_na(with_patients, STOP)
+not_ended
+```
+
+Turns out we're ok. Let's do the filtering now.
+First we'll need to calculate the age of the patient at the start and end of the encounter.
+
+```{r}
+not_ended$AGEATSTART <- as.period(interval(not_ended$BIRTHDATE, not_ended$START))$year
+not_ended$AGEATSTOP <- as.period(interval(not_ended$BIRTHDATE, not_ended$STOP))$year
+select(not_ended, Id, AGEATSTART, AGEATSTOP)
+```
+
+```{r}
+aged <- filter(not_ended, AGEATSTART >= 18 & AGEATSTOP <= 35)
+aged
+```
+
+That finishes up the first task.
