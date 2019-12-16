@@ -207,3 +207,7 @@ output <- first_readmission_dated %>%
   
 output
 ```
+
+```{r}
+readr::write_csv(output, "submission.csv", na = "N/A", append = FALSE)
+```
