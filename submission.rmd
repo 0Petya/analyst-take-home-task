@@ -167,7 +167,6 @@ arrange(select(filtered_readmission, READMISSION, READMISSION_90_DAY_IND, READMI
 Earlier when figuring out how many days there was till a readmission, we also put in what the readmission date is. We can use that here. This works because before doing that, we sorted the group dataframes by `START`. This way the next date is guaranteed to be the first readmission after a specific encounter.
 
 ```{r}
-#first_readmission_dated <- mutate(filtered_readmission, FIRST_READMISSION_DATE = as_datetime(ifelse(READMISSION_90_DAY_IND == 1, READMISSIONDATE, NA)))
 first_readmission_dated <- mutate(filtered_readmission, FIRST_READMISSION_DATE = replace(FIRST_READMISSION_DATE, READMISSION_90_DAY_IND == 0, NA))
 
 arrange(select(first_readmission_dated, READMISSION, READMISSION_90_DAY_IND, READMISSION_30_DAY_IND, FIRST_READMISSION_DATE), READMISSION)
