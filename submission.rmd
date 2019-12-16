@@ -80,14 +80,63 @@ Turns out we're ok. Let's do the filtering now.
 First we'll need to calculate the age of the patient at the start and end of the encounter.
 
 ```{r}
-not_ended$AGEATSTART <- as.period(interval(not_ended$BIRTHDATE, not_ended$START))$year
-not_ended$AGEATSTOP <- as.period(interval(not_ended$BIRTHDATE, not_ended$STOP))$year
-select(not_ended, Id, AGEATSTART, AGEATSTOP)
+age <- mutate(not_ended, AGEATSTART = as.period(interval(BIRTHDATE, START))$year)
+age <- mutate(age, AGEATSTOP = as.period(interval(BIRTHDATE, STOP))$year)
+select(age, Id, AGEATSTART, AGEATSTOP)
 ```
 
 ```{r}
-aged <- filter(not_ended, AGEATSTART >= 18 & AGEATSTOP <= 35)
+aged <- filter(age, AGEATSTART >= 18 & AGEATSTOP <= 35)
 aged
 ```
 
 That finishes up the first task.
+
+---
+
+### Part 2: Create additional fields
+With your drug overdose encounter, create the following indicators:
+
+1. DEATH_AT_VISIT_IND: 1 if patient died during the drug overdose encounter, 0 if the patient died at a different time
+2. COUNT_CURRENT_MEDS: Count of active medications at the start of the drug overdose encounter
+3. CURRENT_OPIOID_IND: 1 if the patient had at least one active medication at the start of the overdose encounter that is on the Opioids List (provided below), 0 if not
+4. READMISSION_90_DAY_IND: 1 if the visit resulted in a subsequent drug overdose readmission within 90 days, 0 if not
+5. READMISSION_30_DAY_IND: 1 if the visit resulted in a subsequent drug overdose readmission within 30 days, 0 if not overdose encounter, 0 if not
+6. FIRST_READMISSION_DATE: The date of the index visit's first readmission for drug overdose. Field should be left as N/A if no readmission for drug overdose within 90 days
+
+---
+
+Opioids List:
+* Hydromorphone 325Mg
+* Fentanyl – 100 MCG
+* Oxycodone-acetaminophen 100 Ml
+
+---
+
+Ok, looking at the data, it seems the only field we have to infer death on is in the `patients` table with the `DEATHDATE` column. If the date falls within the encounter dates, then we'll mark it `1`. The specifications don't state what to do if the patient hasn't died, this would need clarification, but for the purposes of this exercise we'll leave it blank in those cases.
+
+```{r}
+died <- mutate(aged, DEATH_AT_VISIT_IND = ifelse(DEATHDATE >= START & DEATHDATE <= STOP, 1, 0))
+select(died, START, STOP, DEATHDATE, DEATH_AT_VISIT_IND)
+```
+
+For `COUNT_CURRENT_MEDS` we'll have to used the `medications` table.
+
+For `CURRENT_OPOID_IND` we'll have to lookup the codes for the opoids in question; however, the codes in the `medications` table do not appear to match up with results found on: https://mor.nlm.nih.gov/RxNav/ (which is the RxNorm database the data dictionary mentioned). We would need clarification on this, but for this exercise we'll search by the `DESCRIPTION` column instead.
+
+Some drugs have multiple components/ingredients. It's unsure whether we only should concern ourselves with the _pure_ drugs of interest or also these. For example: `Amlodipine 5 MG / Fentanyl 100 MCG / Olmesartan medoxomil 20 MG` vs `Fentanyl 100 MCG`. We would need clarification, but for the exercise we'll only examine the _pure_ drugs because multiple ingredients can modulate the effects of the drug in question; and it's a little closer to the specification.
+
+```{r}
+opoids = c("Hydromorphone 325 MG", "Fentanyl 100 MCG", "Oxycodone-acetaminophen 100ML")
+
+get_meds <- function(start, pt) {
+  filter(medications, PATIENT == pt & START <= start & STOP <= start)
+}
+
+current_meds <- died %>%
+  mutate(CURRENTMEDS = pmap(list(START, PATIENT), get_meds)) %>%
+  mutate(COUNT_CURRENT_MEDS = map_int(CURRENTMEDS, nrow)) %>%
+  mutate(CURRENT_OPOID_IND = map_int(CURRENTMEDS, function(med) any(med$DESCRIPTION %in% opoids)))
+         
+current_meds
+```
