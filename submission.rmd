@@ -116,7 +116,7 @@ Opioids List:
 Ok, looking at the data, it seems the only field we have to infer death on is in the `patients` table with the `DEATHDATE` column. If the date falls within the encounter dates, then we'll mark it `1`. The specifications don't state what to do if the patient hasn't died, this would need clarification, but for the purposes of this exercise we'll leave it blank in those cases.
 
 ```{r}
-died <- mutate(aged, DEATH_AT_VISIT_IND = ifelse(DEATHDATE >= START & DEATHDATE <= STOP, 1, 0))
+died <- mutate(aged, DEATH_AT_VISIT_IND = as.integer(DEATHDATE >= START & DEATHDATE <= STOP))
 select(died, START, STOP, DEATHDATE, DEATH_AT_VISIT_IND)
 ```
 
@@ -138,5 +138,27 @@ current_meds <- died %>%
   mutate(COUNT_CURRENT_MEDS = map_int(CURRENTMEDS, nrow)) %>%
   mutate(CURRENT_OPOID_IND = map_int(CURRENTMEDS, function(med) any(med$DESCRIPTION %in% opoids)))
          
-current_meds
+select(current_meds, CURRENTMEDS, COUNT_CURRENT_MEDS, CURRENT_OPOID_IND)
+```
+
+Now we can begin looking at readmissions. Let's calculate how many days it will be to the next encounter.
+
+```{r}
+readmission <- current_meds %>%
+  arrange(START) %>%
+  group_by(PATIENT) %>%
+  mutate(READMISSION = as.period(lead(START) - STOP)$day) %>%
+  ungroup
+
+readmission$READMISSION
+```
+
+Great, now we can add the `READMISSION_90_DAY_IND` and `READMISSION_30_DAY_IND` columns.
+
+```{r}
+filtered_readmission <- readmission %>%
+  mutate(READMISSION_90_DAY_IND = as.integer(READMISSION <= 90)) %>%
+  mutate(READMISSION_30_DAY_IND = as.integer(READMISSION <= 30))
+
+arrange(select(filtered_readmission, READMISSION, READMISSION_90_DAY_IND, READMISSION_30_DAY_IND), desc(READMISSION_30_DAY_IND))
 ```
