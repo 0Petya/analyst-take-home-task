@@ -129,16 +129,16 @@ Some drugs have multiple components/ingredients. It's unsure whether we only sho
 ```{r}
 opoids = c("Hydromorphone 325 MG", "Fentanyl 100 MCG", "Oxycodone-acetaminophen 100ML")
 
-get_meds <- function(start, pt) {
-  filter(medications, PATIENT == pt & START <= start & STOP <= start)
+get_meds <- function(start, stop, pt) {
+  filter(medications, PATIENT == pt & START <= start & (STOP >= stop | is.na(STOP)))
 }
 
 current_meds <- died %>%
-  mutate(CURRENTMEDS = pmap(list(START, PATIENT), get_meds)) %>%
+  mutate(CURRENTMEDS = pmap(list(START, STOP, PATIENT), get_meds)) %>%
   mutate(COUNT_CURRENT_MEDS = map_int(CURRENTMEDS, nrow)) %>%
   mutate(CURRENT_OPOID_IND = map_int(CURRENTMEDS, function(med) any(med$DESCRIPTION %in% opoids)))
          
-select(current_meds, CURRENTMEDS, COUNT_CURRENT_MEDS, CURRENT_OPOID_IND)
+arrange(select(current_meds, CURRENTMEDS, COUNT_CURRENT_MEDS, CURRENT_OPOID_IND), desc(COUNT_CURRENT_MEDS))
 ```
 
 Now we can begin looking at readmissions. Let's calculate how many days it will be to the next encounter.
