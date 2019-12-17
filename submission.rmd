@@ -86,7 +86,7 @@ select(age, Id, AGEATSTART, AGEATSTOP)
 ```
 
 ```{r}
-aged <- filter(age, AGEATSTART >= 18 & AGEATSTOP <= 35)
+aged <- filter(age, AGEATSTART >= 18 & AGEATSTOP < 36)
 aged
 ```
 
